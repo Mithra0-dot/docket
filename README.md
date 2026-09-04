@@ -6,6 +6,8 @@ Most fraud detection systems output a number. Docket investigates ambiguous
 cases and produces an auditable judgment — grounded in real precedent, 
 honest about its own economics, and built to be defended, not just demoed.
 
+![Docket Dashboard](docs/dashboard.png)
+
 ## What it does
 
 1. **Scores every transaction** using an XGBoost model trained on real, 
