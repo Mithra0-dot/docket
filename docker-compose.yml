@@ -1,0 +1,73 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: docket
+      POSTGRES_USER: docket
+      POSTGRES_PASSWORD: docket
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docket -d docket"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - >-
+        echo "Starting Ollama server...";
+        ollama serve &
+        until ollama list >/dev/null 2>&1; do
+          sleep 1;
+        done;
+        echo "Ollama API is ready; attempting model pull llama3.2:3b...";
+        if ! timeout 600s ollama pull llama3.2:3b; then
+          echo "WARNING: Ollama model pull timed out or failed for llama3.2:3b. The server remains running, but the model is not ready yet." >&2;
+        else
+          echo "Model llama3.2:3b is ready.";
+        fi;
+        tail -f /dev/null
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql://docket:docket@db:5432/docket
+      DATA_DIR: /data
+      MEMO_GENERATOR: ${MEMO_GENERATOR:-template}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data:ro
+      - ./models:/app/models
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  ollama_data:
